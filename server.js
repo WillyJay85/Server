@@ -3,21 +3,30 @@ const Hapi = require('hapi');
 const Joi = require('Joi');
 const mysql = require('mysql');
 
-const connection = mysql.createConnection({
-    host: 'us-cdbr-iron-east-01.cleardb.net',
-    user: 'b2bb976c0a2130',
-    password: 'ac48b282',
-    database: 'heroku_794a7ba6903323e'
+// const connection = mysql.createConnection({
+//     host: 'us-cdbr-iron-east-01.cleardb.net',
+//     user: 'b2bb976c0a2130',
+//     password: 'ac48b282',
+//     database: 'heroku_794a7ba6903323e'
+// })
+
+// connection.connect(function (err) {
+
+//     if (err) {
+//         console.error('error connecting:' + err.stack);
+//         return;
+//     }
+//     console.log('connected as id' + connection.threadId);
+// });
+
+const conpool = mysql.createPool({
+    connectionLimit : 5,
+    host     : 'us-cdbr-iron-east-01.cleardb.net',
+    user     : 'b2bb976c0a2130',
+    password : 'ac48b282',
+    database : 'heroku_794a7ba6903323e',
+    debug    : false
 })
-
-connection.connect(function (err) {
-
-    if (err) {
-        console.error('error connecting:' + err.stack);
-        return;
-    }
-    console.log('connected as id' + connection.threadId);
-});
 
 // Create a server with a host and port
 const server = Hapi.server({
@@ -34,20 +43,37 @@ server.route({
     path: '/jobs',
     handler: (request, h) => {
 
-        let strsql = '*'
+        // let strsql = '*'
 
         return new Promise((resolve, reject) => {
-            connection.query('SELECT' + strsql + 'FROM jobs', function (error, results, fields) {
-
+            conpool.getConnection(function(err,connection){
+                if (err) {
+                    reject(err);
+                }
+                connection.query('SELECT * FROM jobs', function (error, results, fields) {
+                connection.release();
                 if (error) {
                     reject(error)
                 } else {
 
                     resolve({
-                        jobs: results
+                        jobs: results.map(row => {
+                            return{
+                                ID: row.ID,
+                                jobTargetDate: row.jobtargetdate,
+                                appSubmittedTo: row.appsubmittedto,
+                                interviewDate1: row.interviewdate1,
+                                notesOfInterview1: row.notesofinterview1,
+                                offer: row.offer,
+                                salary: row.salary
+
+                            }
+                        })
                     }
                     );
                 }
+            })
+
             })
         })
 
@@ -56,31 +82,37 @@ server.route({
 
 //insert
 server.route({
+    config: {
+        cors: {
+            origin: ['*'],
+            additionalHeaders: ['cache-control', 'x-requested-with']
+        }
+    },
     method: "POST",
     path: '/jobs',
     handler: (request, h) => {
         // const newJob=request.payload
         return new Promise(function (resolve, reject) {
-            conPool.getConnection(function (err, connection) {
+            conpool.getConnection(function (err, connection) {
                 if (err) {
                     reject(err)
                 }
                 const post = {
-                    jobtargetdate: request.payload.jobtargetdate,
-                    appsubmittedto: request.payload.appsubmittedto,
-                    interviewdate1: request.payload.interviewdate1,
-                    notesofinterview1: request.payload.notesofinterview1,
+                    jobtargetdate: request.payload.jobTargetDate,
+                    appsubmittedto: request.payload.appSubmittedTo,
+                    interviewdate1: request.payload.interviewDate1,
+                    notesofinterview1: request.payload.notesOfInterview1,
                     offer: request.payload.offer,
                     salary: request.payload.salary
                 }
-                const query = connection.query('Insert INTO jobs SET ?', post,
+                 connection.query('Insert INTO jobs SET ?', post,
                     function (error, results, fields) {
                         connection.release();
                         if (error) {
                             reject(error)
                         }
                         else {
-                            resolve(results);
+                            resolve(h.response().code(201));
                         }
                     }
                 )
@@ -99,14 +131,16 @@ server.route({
         return new Promise(function (resolve, reject) {
             conpool.getConnection(function (err, connection) {
                 if (err) {
-                    reject(error)
+                    console.error(err)
+                    reject(err)
                 }
-                const { jobtargetdate, appsubmittedto, interviewdate1, notesofinterview1, offer, salary } = request.payload;
-                const arraylist = { jobtargetdate, appsubmittedto, interviewdate1, notesofinterview1, offer, salary, jobID };
-                const query = connection.query('UPDATE jobs SET jobtargetdate=?, appsubmittedto=?, interviewdate1=?, notesofinterview1=?, offer=?, salary=? WHERE id=?',
+                const { jobTargetDate, appSubmittedTo, interviewDate1, notesOfInterview1, offer, salary } = request.payload;
+                const arraylist = [ jobTargetDate, appSubmittedTo, interviewDate1, notesOfInterview1, offer, salary, jobID ];
+                const query = connection.query('UPDATE jobs SET jobtargetdate = ?, appsubmittedto = ?, interviewdate1 = ?, notesofinterview1 = ?, offer = ?, salary = ? WHERE ID = ?',
                     arraylist, function (error, results, fields) {
                         connection.release();
                         if (error) {
+                            console.error(error)
                             reject(error);
                         }
                         else {
