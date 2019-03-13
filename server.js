@@ -158,12 +158,13 @@ server.route({
     path: '/jobs/{ID}',
     handler: (request, h) => {
         let jobID = request.params.ID;
+        console.log('job ID ', jobID)
         return new Promise(function (resolve, reject) {
             conpool.getConnection(function (err, connection) {
                 if (err) {
                     reject(err)
                 }
-                connection.query('DELETE FROM jobs WHERE id=?', jobID, function (error, results, fields) {
+                connection.query('DELETE FROM jobs WHERE ID=?', jobID, function (error, results, fields) {
                     if (error) {
                         reject(error)
                     } else {
